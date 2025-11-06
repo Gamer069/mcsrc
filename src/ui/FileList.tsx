@@ -76,7 +76,7 @@ const FileList = () => {
     };
 
     const selectedKeys = useObservable(selectedFileKeys);
-    const onSelect: TreeProps['onSelect'] = (selectedKeys, _) => {
+    const onSelect: TreeProps['onSelect'] = (selectedKeys) => {
         selectedFile.next(selectedKeys.join('/'));
     };
 
