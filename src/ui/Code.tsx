@@ -8,6 +8,7 @@ import { classesList } from '../logic/JarFile';
 import { openTab } from '../logic/Tabs';
 import { Spin } from 'antd';
 import { LoadingOutlined } from '@ant-design/icons';
+import { state, setSelectedFile } from '../logic/State';
 
 const Code = () => {
     const monaco = useMonaco();
@@ -17,8 +18,10 @@ const Code = () => {
     const editorRef = useRef<editor.IStandaloneCodeEditor | null>(null);
     const hideMinimap = useObservable(isThin);
     const decompiling = useObservable(isDecompiling);
+    const currentState = useObservable(state);
 
     const decorationsCollectionRef = useRef<editor.IEditorDecorationsCollection | null>(null);
+    const lineHighlightRef = useRef<editor.IEditorDecorationsCollection | null>(null);
 
     useEffect(() => {
         if (!monaco) return;
@@ -117,13 +120,34 @@ const Code = () => {
         decorationsCollectionRef.current = editor.createDecorationsCollection(decorations);
     }, [decompileResult]);
 
-    // Scroll to top when source changes
+    // Scroll to top when source changes, or to specific line if specified
     useEffect(() => {
         if (editorRef.current) {
-            editorRef.current.setScrollPosition({ scrollTop: 0, scrollLeft: 0 });
-            editorRef.current.setPosition({ lineNumber: 1, column: 1 });
+            const currentLine = currentState?.line;
+            editorRef.current.setPosition({ lineNumber: currentLine ?? 1, column: 1 });
+            lineHighlightRef.current?.clear();
+
+            if (currentLine) {
+                const lineEnd = currentState?.lineEnd ?? currentLine;
+
+                // Scroll to the specified lines
+                editorRef.current.revealLinesInCenterIfOutsideViewport(currentLine, lineEnd);
+
+                // Highlight the line range
+                lineHighlightRef.current = editorRef.current.createDecorationsCollection([{
+                    range: new Range(currentLine, 1, lineEnd, 1),
+                    options: {
+                        isWholeLine: true,
+                        className: 'highlighted-line',
+                        glyphMarginClassName: 'highlighted-line-glyph'
+                    }
+                }]);
+            } else {
+                // Default: scroll to top
+                editorRef.current.setScrollPosition({ scrollTop: 0, scrollLeft: 0 });
+            }
         }
-    }, [decompileResult]);
+    }, [decompileResult, currentState?.line, currentState?.lineEnd]);
 
     return (
         <Spin
@@ -145,9 +169,30 @@ const Code = () => {
                     readOnly: true,
                     domReadOnly: true,
                     tabSize: 3,
-                    minimap: { enabled: !hideMinimap }
+                    minimap: { enabled: !hideMinimap },
+                    glyphMargin: true
                 }}
-                onMount={(editor) => { editorRef.current = editor; }} />
+                onMount={(codeEditor) => {
+                    editorRef.current = codeEditor;
+
+                    // Handle gutter clicks for line linking
+                    codeEditor.onMouseDown((e) => {
+                        if (e.target.type === editor.MouseTargetType.GUTTER_LINE_NUMBERS ||
+                            e.target.type === editor.MouseTargetType.GUTTER_GLYPH_MARGIN) {
+                            const lineNumber = e.target.position?.lineNumber;
+
+                            const currentState = state.value;
+                            if (lineNumber && currentState) {
+                                // Shift-click to select a range
+                                if (e.event.shiftKey && currentState.line) {
+                                    setSelectedFile(currentState.file, currentState.line, lineNumber);
+                                } else {
+                                    setSelectedFile(currentState.file, lineNumber);
+                                }
+                            }
+                        }
+                    });
+                }} />
         </Spin>
     );
 };

@@ -6,6 +6,8 @@ export interface State {
   version: number; // Allows us to change the permalink structure in the future
   minecraftVersion: string;
   file: string;
+  line?: number;
+  lineEnd?: number;
 }
 
 const DEFAULT_STATE: State = {
@@ -16,7 +18,20 @@ const DEFAULT_STATE: State = {
 
 const getInitialState = (): State => {
   const hash = window.location.hash;
-  const path = hash.startsWith('#/') ? hash.slice(2) : (hash.startsWith('#') ? hash.slice(1) : '');
+  let path = hash.startsWith('#/') ? hash.slice(2) : (hash.startsWith('#') ? hash.slice(1) : '');
+
+  // Check for line number marker (e.g., #L123 or #L10-20)
+  let lineNumber: number | undefined;
+  let lineEnd: number | undefined;
+  const lineMatch = path.match(/#L(\d+)(?:-(\d+))?$/);
+  if (lineMatch) {
+    lineNumber = parseInt(lineMatch[1], 10);
+    if (lineMatch[2]) {
+      lineEnd = parseInt(lineMatch[2], 10);
+    }
+    path = path.substring(0, lineMatch.index);
+  }
+
   const segments = path.split('/').filter(s => s.length > 0);
 
   if (segments.length < 3) {
@@ -35,7 +50,9 @@ const getInitialState = (): State => {
   return {
     version,
     minecraftVersion,
-    file: filePath + (filePath.endsWith('.class') ? '' : '.class')
+    file: filePath + (filePath.endsWith('.class') ? '' : '.class'),
+    line: lineNumber,
+    lineEnd
   };
 };
 
@@ -51,6 +68,14 @@ state.subscribe(s => {
   }
 
   let url = `#${s.version}/${s.minecraftVersion}/${s.file.replace(".class", "")}`;
+
+  if (s.line) {
+    if (s.lineEnd && s.lineEnd !== s.line) {
+      url += `#L${Math.min(s.line, s.lineEnd)}-${Math.max(s.line, s.lineEnd)}`;
+    } else {
+      url += `#L${s.line}`;
+    }
+  }
 
   if (diffView.value) {
     url = "";
@@ -74,10 +99,12 @@ export function updateSelectedMinecraftVersion() {
   });
 }
 
-export function setSelectedFile(file: string) {
+export function setSelectedFile(file: string, line?: number, lineEnd?: number) {
   state.next({
     version: 1,
     minecraftVersion: selectedMinecraftVersion.value || "",
-    file
+    file,
+    line,
+    lineEnd
   });
 }
