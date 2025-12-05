@@ -89,10 +89,10 @@ function tokenCollector(tokens: Token[]): TokenCollector {
             tokens.push({ type: "class", start, length, className: name, declaration });
         },
         visitField: function (start: number, length: number, declaration: boolean, className: string, name: string, descriptor: string): void {
-            tokens.push({ type: "field", start, length, className, declaration });
+            tokens.push({ type: "field", start, length, className, declaration, name, descriptor });
         },
         visitMethod: function (start: number, length: number, declaration: boolean, className: string, name: string, descriptor: string): void {
-            tokens.push({ type: "method", start, length, className, declaration });
+            tokens.push({ type: "method", start, length, className, declaration, name, descriptor });
         },
         visitParameter: function (start: number, length: number, declaration: boolean, className: string, methodName: string, methodDescriptor: string, index: number, name: string): void {
             tokens.push({ type: "parameter", start, length, className, declaration });

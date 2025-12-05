@@ -6,9 +6,57 @@ import { editor, languages, Range, Uri, type CancellationToken, type IPosition, 
 import { isThin } from '../logic/Browser';
 import { classesList } from '../logic/JarFile';
 import { openTab } from '../logic/Tabs';
-import { Spin } from 'antd';
+import { Spin, message } from 'antd';
 import { LoadingOutlined } from '@ant-design/icons';
 import { state, setSelectedFile } from '../logic/State';
+import type { Token } from '../logic/Tokens';
+
+const IS_DEFINITION_CONTEXT_KEY_NAME = "is_definition";
+
+function findTokenAtPosition(
+    editor: editor.ICodeEditor,
+    decompileResult: { tokens: Token[]; } | undefined,
+    classList: string[] | undefined
+): Token | null {
+    const model = editor.getModel();
+    if (!model || !decompileResult || !classList) {
+        return null;
+    }
+
+    const position = editor.getPosition();
+    if (!position) {
+        return null;
+    }
+
+    const { lineNumber, column } = position;
+    const lines = model.getLinesContent();
+    let charCount = 0;
+    let targetOffset = 0;
+
+    for (let i = 0; i < lineNumber - 1; i++) {
+        charCount += lines[i].length + 1; // +1 for \n
+    }
+    targetOffset = charCount + (column - 1);
+
+    for (const token of decompileResult.tokens) {
+        if (targetOffset >= token.start && targetOffset <= token.start + token.length) {
+            const className = token.className + ".class";
+            if (classList.includes(className)) {
+                return token;
+            }
+        }
+
+        if (token.start > targetOffset) {
+            break;
+        }
+    }
+
+    return null;
+}
+
+async function setClipboard(text: string): Promise<void> {
+    await navigator.clipboard.writeText(text);
+}
 
 const Code = () => {
     const monaco = useMonaco();
@@ -22,9 +70,21 @@ const Code = () => {
 
     const decorationsCollectionRef = useRef<editor.IEditorDecorationsCollection | null>(null);
     const lineHighlightRef = useRef<editor.IEditorDecorationsCollection | null>(null);
+    const decompileResultRef = useRef(decompileResult);
+    const classListRef = useRef(classList);
+
+    const [messageApi, contextHolder] = message.useMessage();
+
+    // Keep refs updated
+    useEffect(() => {
+        decompileResultRef.current = decompileResult;
+        classListRef.current = classList;
+    }, [decompileResult, classList]);
 
     useEffect(() => {
         if (!monaco) return;
+        if (!editorRef.current) return;
+        const editor = editorRef.current;
         const definitionProvider = monaco.languages.registerDefinitionProvider("java", {
             provideDefinition(model, position, token) {
                 const { lineNumber, column } = position;
@@ -143,7 +203,72 @@ const Code = () => {
             }
         });
 
+        const copyAw = monaco.editor.addEditorAction({
+            id: 'copy_aw',
+            label: 'Copy Class Tweaker / Access Widener',
+            contextMenuGroupId: '9_cutcopypaste',
+            precondition: IS_DEFINITION_CONTEXT_KEY_NAME,
+            run: async function (editor: editor.ICodeEditor, ...args: any[]): Promise<void> {
+                const token = findTokenAtPosition(editor, decompileResultRef.current, classListRef.current);
+                if (!token) {
+                    messageApi.error("Failed to find token for Class Tweaker entry.");
+                    return;
+                }
+
+                switch (token.type) {
+                    case "class":
+                        await setClipboard(`accessible class ${token.className}`);
+                        break;
+                    case "field":
+                        await setClipboard(`accessible field ${token.className} ${token.name} ${token.descriptor}`);
+                        break;
+                    case "method":
+                        await setClipboard(`accessible method ${token.className} ${token.name} ${token.descriptor}`);
+                        break;
+                    default:
+                        messageApi.error("Token is not a class, field, or method.");
+                        return;
+                }
+
+                messageApi.success("Copied Class Tweaker entry to clipboard.");
+            }
+        });
+
+        const copyMixin = monaco.editor.addEditorAction({
+            id: 'copy_mixin',
+            label: 'Copy Mixin Target',
+            contextMenuGroupId: '9_cutcopypaste',
+            precondition: IS_DEFINITION_CONTEXT_KEY_NAME,
+            run: async function (editor: editor.ICodeEditor, ...args: any[]): Promise<void> {
+                const token = findTokenAtPosition(editor, decompileResultRef.current, classListRef.current);
+                if (!token) {
+                    messageApi.error("Failed to find token for Mixin target.");
+                    return;
+                }
+
+                switch (token.type) {
+                    case "class":
+                        await setClipboard(`${token.className}`);
+                        break;
+                    case "field":
+                        await setClipboard(`L${token.className};${token.name}:${token.descriptor}`);
+                        break;
+                    case "method":
+                        await setClipboard(`L${token.className};${token.name}${token.descriptor}`);
+                        break;
+                    default:
+                        messageApi.error("Token is not a class, field, or method.");
+                        return;
+                }
+
+                messageApi.success("Copied Mixin target to clipboard.");
+            }
+        });
+
         return () => {
+            // Dispose in the oppsite order
+            copyMixin.dispose();
+            copyAw.dispose();
             foldingRange.dispose();
             editorOpener.dispose();
             definitionProvider.dispose();
@@ -219,6 +344,7 @@ const Code = () => {
                 color: 'white'
             }}
         >
+            {contextHolder}
             <Editor
                 height="100vh"
                 defaultLanguage="java"
@@ -230,13 +356,22 @@ const Code = () => {
                     tabSize: 3,
                     minimap: { enabled: !hideMinimap },
                     glyphMargin: true,
-                    foldingImportsByDefault: true
+                    foldingImportsByDefault: true,
                 }}
                 onMount={(codeEditor) => {
                     editorRef.current = codeEditor;
 
                     // Fold imports by default
                     codeEditor.getAction('editor.foldAll')?.run();
+
+                    // Update context key when cursor position changes
+                    // We use this to know when to show the options to copy AW/Mixin strings 
+                    const isDefinitionContextKey = codeEditor.createContextKey<boolean>(IS_DEFINITION_CONTEXT_KEY_NAME, false);
+                    codeEditor.onDidChangeCursorPosition((e) => {
+                        const token = findTokenAtPosition(codeEditor, decompileResultRef.current, classListRef.current);
+                        const validToken = token != null && (token.type == "class" || token.type == "method" || token.type == "field");
+                        isDefinitionContextKey.set(validToken);
+                    });
 
                     // Handle gutter clicks for line linking
                     codeEditor.onMouseDown((e) => {
