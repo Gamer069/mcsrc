@@ -1,5 +1,5 @@
-import { load } from "../../indexer/build/generated/teavm/wasm-gc/indexer.wasm-runtime.js";
-import indexerWasm from '../../indexer/build/generated/teavm/wasm-gc/indexer.wasm?url';
+import { load } from "../../java/build/generated/teavm/wasm-gc/java.wasm-runtime.js";
+import indexerWasm from '../../java/build/generated/teavm/wasm-gc/java.wasm?url';
 import type { UsageKey, UsageString } from "./UsageIndex.js";
 
 let teavm: Awaited<ReturnType<typeof load>> | null = null;

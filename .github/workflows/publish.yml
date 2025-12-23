@@ -23,7 +23,7 @@ jobs:
         with:
           node-version-file: ".nvmrc"
       - run: ./gradlew build
-        working-directory: indexer
+        working-directory: java
       - run: npm ci
       - run: npm run build
       - name: Setup Pages

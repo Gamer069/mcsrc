@@ -4,9 +4,9 @@ Note: This project is not affiliated with Mojang or Microsoft in any way. It doe
 
 ## How to build locally
 
-First you must build the wasm indexer using Gradle.
+First you must build the java project using Gradle.
 
-- `cd indexer`
+- `cd java`
 - `./gradlew build`
 
 Then you can run the web app:
