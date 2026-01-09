@@ -1,13 +1,16 @@
 import { Tabs } from "antd";
 import { useObservable } from "../utils/UseObservable";
-import { activeTabKey, closeTab, openTab, openTabs, setTabPosition } from "../logic/Tabs";
-import React, { useRef, useState } from "react";
+import { activeTabKey, closeTab, openTab, openTabs, setTabPosition, closeOtherTabs } from "../logic/Tabs";
+import React, { useEffect, useRef, useState } from "react";
 
 export const TabsComponent = () => {
     // variables - tabs
     const activeKey = useObservable(activeTabKey);
     const tabs = useObservable(openTabs);
     const tabRefs = useRef<Record<string, HTMLDivElement | null>>({});
+
+    // variables - context menu
+    const [contextMenu, setContextMenu] = useState<{ x: number; y: number; key: string; } | null>(null);
 
     // variables - dragging
     const draggingKey = useRef("");
@@ -16,7 +19,7 @@ export const TabsComponent = () => {
 
     // variables - dragging (mouse positioning)
     const mouseMovementDelta = useRef(0); // tracks how far the mouse has moved
-    const lastMousePos = useRef({ x: -1, y: -1 })
+    const lastMousePos = useRef({ x: -1, y: -1 });
     const threshold = 50; // mouse movement threshold after which tab dragging will activate
 
     // variables - tab ghost image
@@ -30,9 +33,9 @@ export const TabsComponent = () => {
                 key: k,
                 x: rect?.x ?? -1000,
                 width: rect?.width ?? 0
-            })
-        })
-    }
+            });
+        });
+    };
 
     const borderStyle = (key: string) => {
         if (!tabs) return;
@@ -40,7 +43,7 @@ export const TabsComponent = () => {
         const style = {
             borderLeft: "2px solid transparent",
             borderRight: "2px solid transparent"
-        }
+        };
 
         const tabIndex = tabs.findIndex(tab => tab.key === key);
 
@@ -55,7 +58,7 @@ export const TabsComponent = () => {
         }
 
         return style;
-    }
+    };
 
     const setGhostImage = (element: HTMLDivElement) => {
         if (!tabRefs || !tabRefs.current) return;
@@ -71,10 +74,10 @@ export const TabsComponent = () => {
         ghost.style.pointerEvents = "none";
         ghost.style.border = "1px solid #303030";
         ghost.style.borderRadius = "8px";
-        ghost.style.visibility = "hidden"
+        ghost.style.visibility = "hidden";
         document.body.appendChild(ghost);
         ghostImage.current = ghost;
-    }
+    };
 
     const setPlaceIndexSync = (v: number) => {
         placeIndexRef.current = v;
@@ -90,8 +93,18 @@ export const TabsComponent = () => {
     };
 
     const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>, key: string) => {
+        // Middle click (button 1) closes the tab
+        if (e.button === 1) {
+            e.preventDefault();
+            closeTab(key);
+            return;
+        }
+
+        // Only proceed with drag for left click (button 0)
+        if (e.button !== 0) return;
+
         mouseMovementDelta.current = 0;
-        lastMousePos.current = { x: e.clientX, y: e.clientY }
+        lastMousePos.current = { x: e.clientX, y: e.clientY };
 
         draggingKey.current = key;
 
@@ -100,7 +113,7 @@ export const TabsComponent = () => {
         // Add listeners to global document
         document.addEventListener("mouseup", handleMouseUp);
         document.addEventListener("mousemove", handleMouseMove);
-    }
+    };
 
     const handleMouseMove = (e: MouseEvent) => {
         if (draggingKey.current === "") return;
@@ -113,7 +126,7 @@ export const TabsComponent = () => {
         const dy = e.clientY - lastMousePos.current.y;
         mouseMovementDelta.current += Math.sqrt(dx * dx + dy * dy);
 
-        lastMousePos.current = { x: e.clientX, y: e.clientY }
+        lastMousePos.current = { x: e.clientX, y: e.clientY };
 
         if (mouseMovementDelta.current < threshold) return;
 
@@ -136,7 +149,7 @@ export const TabsComponent = () => {
                     key: r.key,
                     dist: Math.abs(mid - mouseX),
                     before: mouseX < mid // before midpoint?
-                }
+                };
             })
             .sort((a, b) => a.dist - b.dist)[0];
 
@@ -144,11 +157,11 @@ export const TabsComponent = () => {
         if (index < 0) return;
 
         setPlaceIndexSync(index);
-    }
+    };
 
     const handleMouseUp = () => {
         document.removeEventListener("mouseup", handleMouseUp);
-        document.removeEventListener("mouseover", handleMouseMove)
+        document.removeEventListener("mouseover", handleMouseMove);
 
         const currentIndex = tabs ? tabs.findIndex(tab => tab.key === draggingKey.current) : -1;
         if (
@@ -163,36 +176,98 @@ export const TabsComponent = () => {
         setPlaceIndexSync(-1);
 
         if (ghostImage.current) document.body.removeChild(ghostImage.current);
-    }
+    };
+
+    const handleContextMenu = (e: React.MouseEvent<HTMLDivElement>, key: string) => {
+        e.preventDefault();
+        setContextMenu({ x: e.clientX, y: e.clientY, key });
+    };
+
+    const handleCloseContextMenu = () => {
+        setContextMenu(null);
+    };
+
+    const handleCloseOtherTabs = () => {
+        if (contextMenu) {
+            closeOtherTabs(contextMenu.key);
+        }
+        setContextMenu(null);
+    };
+
+    useEffect(() => {
+        if (contextMenu) {
+            document.addEventListener("click", handleCloseContextMenu);
+            return () => document.removeEventListener("click", handleCloseContextMenu);
+        }
+    }, [contextMenu]);
 
     return (
-        <Tabs
-            hideAdd
-            type="editable-card"
-            activeKey={activeKey}
-            onEdit={onEdit}
-            onTabClick={(key) => openTab(key)}
-            items={tabs?.map(({key}) => ({
-                key,
-                label: (
-                    <div
-                        onMouseDown={(e) => { handleMouseDown(e, key) }}
-                        ref={(el) => { tabRefs.current[key] = el }}
-                        style={{ userSelect: "none", }}
-                    >
-                        {key.replace(".class", "").split("/").pop()}
-                    </div>
-                )
-            }))}
-            renderTabBar={(tabBarProps, DefaultTabBar) => (
-                <DefaultTabBar {...tabBarProps}>
-                    {(node) => (
-                        <div style={borderStyle(String(node.key))}>
-                            {node}
+        <>
+            <Tabs
+                hideAdd
+                type="editable-card"
+                activeKey={activeKey}
+                onEdit={onEdit}
+                onTabClick={(key) => openTab(key)}
+                items={tabs?.map(({ key }) => ({
+                    key,
+                    label: (
+                        <div
+                            onMouseDown={(e) => { handleMouseDown(e, key); }}
+                            onContextMenu={(e) => { handleContextMenu(e, key); }}
+                            ref={(el) => { tabRefs.current[key] = el; }}
+                            style={{ userSelect: "none", }}
+                        >
+                            {key.replace(".class", "").split("/").pop()}
                         </div>
-                    )}
-                </DefaultTabBar>
+                    )
+                }))}
+                renderTabBar={(tabBarProps, DefaultTabBar) => (
+                    <DefaultTabBar {...tabBarProps}>
+                        {(node) => (
+                            <div style={borderStyle(String(node.key))}>
+                                {node}
+                            </div>
+                        )}
+                    </DefaultTabBar>
+                )}
+            />
+
+            {contextMenu && (
+                <div
+                    style={{
+                        position: "fixed",
+                        top: contextMenu.y,
+                        left: contextMenu.x,
+                        background: "#1f1f1f",
+                        border: "1px solid #454545",
+                        borderRadius: "4px",
+                        padding: "4px 0",
+                        zIndex: 1000,
+                        minWidth: "160px",
+                        boxShadow: "0 2px 8px rgba(0,0,0,0.5)"
+                    }}
+                    onClick={(e) => e.stopPropagation()}
+                >
+                    <div
+                        onClick={handleCloseOtherTabs}
+                        style={{
+                            padding: "6px 12px",
+                            cursor: "pointer",
+                            color: "#cccccc",
+                            fontSize: "13px"
+                        }}
+                        onMouseEnter={(e) => {
+                            e.currentTarget.style.background = "#2a2a2a";
+                        }}
+                        onMouseLeave={(e) => {
+                            e.currentTarget.style.background = "transparent";
+                        }}
+                    >
+                        Close Other Tabs
+                    </div>
+                </div>
             )}
-        />
+        </>
     );
 };

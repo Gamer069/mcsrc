@@ -81,3 +81,16 @@ export const setTabPosition = (key: string, placeIndex: number) => {
     tabs.splice(index, 0, currentTab);
     openTabs.next(tabs);
 };
+
+export const closeOtherTabs = (key: string) => {
+    const tab = openTabs.value.find(tab => tab.key === key);
+    if (!tab) return;
+
+    openTabs.next([tab]);
+    tabHistory.next([key]);
+
+    if (activeTabKey.value !== key) {
+        activeTabKey.next(key);
+        setSelectedFile(key);
+    }
+};
