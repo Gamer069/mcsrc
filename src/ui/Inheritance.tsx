@@ -4,7 +4,7 @@ import { ClassNode, selectedInheritanceClassName } from "../logic/Inheritance";
 import { isInterface, isAbstract } from "../utils/Classfile";
 import { useMemo, useCallback, useEffect } from "react";
 import dagre from "dagre";
-import { setSelectedFile } from "../logic/State";
+import { openTab } from "../logic/Tabs";
 
 function buildGraphData(classNode: ClassNode): { nodes: Node[]; edges: Edge[]; } {
     const nodes: Node[] = [];
@@ -194,7 +194,7 @@ const InheritanceGraph = ({ data }: { data: ClassNode; }) => {
     const onNodeClick = useCallback((_event: React.MouseEvent, node: Node) => {
         // Convert internal class name format (e.g., "net/minecraft/ChatFormatting") to file path
         const filePath = node.id + ".class";
-        setSelectedFile(filePath);
+        openTab(filePath);
         selectedInheritanceClassName.next(null);
     }, []);
 
