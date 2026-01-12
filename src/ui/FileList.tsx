@@ -5,7 +5,7 @@ import { map, type Observable } from 'rxjs';
 import { classesList } from '../logic/JarFile';
 import { useObservable } from '../utils/UseObservable';
 import { selectedFile } from '../logic/State';
-import { useState, useEffect, useRef, useReducer } from 'react';
+import { useState } from 'react';
 import type { Key } from 'antd/es/table/interface';
 import { openTab } from '../logic/Tabs';
 import { showLines } from '../logic/Settings';
@@ -94,11 +94,7 @@ const FileList = () => {
 
     return (
         <Tree.DirectoryTree
-<<<<<<< HEAD
             showLine={showLines.value}
-=======
-            showLine
->>>>>>> origin/main
             switcherIcon={<CaretDownFilled />}
             selectedKeys={selectedKeys}
             onSelect={onSelect}
