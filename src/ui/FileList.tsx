@@ -94,7 +94,7 @@ const FileList = () => {
 
     return (
         <Tree.DirectoryTree
-            showLine={showLines.value}
+            showLine={showLine}
             switcherIcon={<CaretDownFilled />}
             selectedKeys={selectedKeys}
             onSelect={onSelect}

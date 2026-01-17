@@ -9,7 +9,6 @@ lerna-debug.log*
 playwright-report
 test-results
 
-bun.lock
 node_modules
 dist
 dist-ssr
